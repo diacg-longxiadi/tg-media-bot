@@ -9,6 +9,7 @@ import subprocess
 import shutil
 import traceback
 import time
+import urllib.parse
 from pathlib import Path
 
 from telegram import Update, InputMediaPhoto, Document
@@ -335,6 +336,20 @@ TORRENT_SLOW_THRESHOLD = 50 * 1024   # 50 KB/s
 TORRENT_SLOW_WINDOW    = 60          # 秒
 
 
+# 公網 tracker 列表（無入站 IP 時用）
+_PUBLIC_TRACKERS = [
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://tracker.openbittorrent.com:6969/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "https://tracker.nitrix.me:443/announce",
+    "http://tracker.bt4g.com:2095/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://tracker.moeking.me:6969/announce",
+    "https://opentracker.i2p.rocks:443/announce",
+    "http://tracker.renfei.net:8080/announce",
+]
+
 class QBittorrentClient:
     """非同步 qBittorrent Web API 封裝。所有 HTTP 在 executor 裡執行，不阻塞 event loop。"""
 
@@ -414,6 +429,11 @@ class QBittorrentClient:
     async def add_magnet(self, magnet: str, save_path: str) -> str:
         m = re.search(r"btih:([a-fA-F0-9]{40})", magnet, re.IGNORECASE)
         info_hash = m.group(1).lower() if m else ""
+        # 補 tracker（尚未包含的才加）
+        for tr in _PUBLIC_TRACKERS:
+            if tr not in magnet:
+                magnet += f"&tr={urllib.parse.quote(tr, safe='')}"
+        print(f"[qb] add_magnet: {len(_PUBLIC_TRACKERS)} trackers appended, hash={info_hash[:12]}...")
         await self._call("POST", "/torrents/add", data={
             "urls":               magnet,
             "savepath":           save_path,
