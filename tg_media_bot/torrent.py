@@ -107,6 +107,12 @@ class QBittorrentClient:
     async def add_magnet(self, magnet: str, save_path: str) -> str:
         m = re.search(r"btih:([a-fA-F0-9]{40})", magnet, re.IGNORECASE)
         info_hash = m.group(1).lower() if m else ""
+        # 如已存在先刪掉
+        if info_hash:
+            existing = await self.get_torrent(info_hash)
+            if existing:
+                print(f"[qb] magnet {info_hash[:12]}... 已存在，先移除")
+                await self.delete_torrent(info_hash)
         # 補 tracker（尚未包含的才加）
         for tr in _PUBLIC_TRACKERS:
             if tr not in magnet:
@@ -122,13 +128,36 @@ class QBittorrentClient:
         return info_hash
 
     async def add_torrent_file(self, torrent_bytes: bytes, save_path: str) -> str:
-        await self._call("POST", "/torrents/add", multipart=True, data={
-            "torrents":           torrent_bytes,
-            "savepath":           save_path,
-            "upload_limit":       1024,
-            "ratio_limit":        "0",
-            "seeding_time_limit": 0,
-        })
+        try:
+            await self._call("POST", "/torrents/add", multipart=True, data={
+                "torrents":           torrent_bytes,
+                "savepath":           save_path,
+                "upload_limit":       1024,
+                "ratio_limit":        "0",
+                "seeding_time_limit": 0,
+            })
+        except Exception as e:
+            # 409 = 已存在，改先移除再加
+            if "409" in str(e):
+                import traceback
+                print(f"[qb] add torrent 409, 嘗試自動處理：{e}")
+                # 找最近加入的相同 hash 並刪除
+                _, body, _ = await self._call("GET", "/torrents/info?sort=added_on&reverse=true&limit=5")
+                for t in json.loads(body):
+                    try:
+                        await self.delete_torrent(t["hash"])
+                        await asyncio.sleep(1)
+                    except Exception:
+                        pass
+                await self._call("POST", "/torrents/add", multipart=True, data={
+                    "torrents":           torrent_bytes,
+                    "savepath":           save_path,
+                    "upload_limit":       1024,
+                    "ratio_limit":        "0",
+                    "seeding_time_limit": 0,
+                })
+            else:
+                raise
         await asyncio.sleep(2)
         _, body, _ = await self._call("GET", "/torrents/info?sort=added_on&reverse=true&limit=1")
         torrents = json.loads(body)
