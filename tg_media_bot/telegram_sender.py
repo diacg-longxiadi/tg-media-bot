@@ -56,7 +56,7 @@ async def send_video(update: Update, context: ContextTypes.DEFAULT_TYPE,
     msg = update.message
     key = store_url(url)
     deep_link    = f"https://t.me/{context.bot.username}?start=v{key}"
-    full_caption = f"{_escape_md(caption)}\n{_escape_md(deep_link)}" if caption else _escape_md(deep_link)
+    full_caption = f"{_escape_md(caption)}\n[連結]({deep_link})" if caption else f"[連結]({deep_link})"
     print(f"[video] {os.path.getsize(filepath)/1024/1024:.1f} MB")
     with open(filepath, "rb") as f:
         sent = await msg.reply_video(
@@ -75,7 +75,7 @@ async def send_photos(update: Update, context: ContextTypes.DEFAULT_TYPE,
     msg = update.message
     key = store_url(url)
     deep_link = f"https://t.me/{context.bot.username}?start=v{key}"
-    caption   = f"{_escape_md(caption)}\n{_escape_md(deep_link)}" if caption else _escape_md(deep_link)
+    caption   = f"{_escape_md(caption)}\n[連結]({deep_link})" if caption else f"[連結]({deep_link})"
     all_fids  = []
     for idx, chunk in enumerate([paths[i:i+10] for i in range(0, len(paths), 10)]):
         media = []
