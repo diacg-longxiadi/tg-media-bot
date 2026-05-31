@@ -319,8 +319,9 @@ async def dl_twitter_photos(url: str, tmpdir: str):
 
 
 async def dl_douyin(url: str, tmpdir: str):
-    """透過 douyin.wtf API 下載抖音影片（免 cookies）。"""
+    """直接爬抖音頁面提取影片網址（免 cookies、免 API）。"""
     import requests as _req
+    import base64
 
     def _():
         # 先解析短網址（v.douyin.com → www.douyin.com/video/ID）
@@ -337,43 +338,121 @@ async def dl_douyin(url: str, tmpdir: str):
         # 從 URL 提取影片 ID
         m = re.search(r"video/(\d+)", final_url)
         video_id = m.group(1) if m else ""
+        if not video_id:
+            raise ValueError(f"無法從網址提取抖音影片 ID：{final_url}")
 
-        # API 1: douyin.wtf
-        api_url = "https://api.douyin.wtf/api"
-        r = _req.get(api_url, params={"url": final_url, "format": "json"},
-                     timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code == 404 and video_id:
-            # API 1 失敗，改用 cobalt.tools
-            print(f"[douyin] douyin.wtf 404，嘗試 cobalt API…")
-            cobalt = _req.post("https://co.wuk.sh/api/json",
-                json={"url": final_url, "downloadMode": "auto"},
-                timeout=30, headers={"Accept": "application/json",
-                    "User-Agent": "Mozilla/5.0"})
-            cobalt.raise_for_status()
-            data = cobalt.json()
-            video_url = data.get("url")
-            title = data.get("title") or "抖音"
-            if not video_url:
-                raise FileNotFoundError(f"cobalt API 未回傳影片網址：{str(data)[:300]}")
-        else:
-            r.raise_for_status()
-            data = r.json()
-            video_url = data.get("video_url") or data.get("video") or data.get("url")
-            # 試巢狀
-            if not video_url:
-                for key in ("video_data", "data", "item"):
-                    sub = data.get(key, {})
-                    if isinstance(sub, dict):
-                        video_url = sub.get("video_url") or sub.get("play_addr") or sub.get("url")
-                        if video_url:
-                            break
-            if not video_url:
-                raise FileNotFoundError(f"douyin.wtf API 未回傳影片網址：{str(data)[:300]}")
-            title = data.get("title") or data.get("desc") or "抖音"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36",
+            "Referer": "https://www.douyin.com/",
+        }
+
+        # 抓頁面 HTML
+        resp = _req.get(final_url, timeout=15, headers=headers)
+        html = resp.text
+
+        # 方法 1: 找 RENDER_DATA（base64 編碼的 JSON）
+        video_url = None
+        title = "抖音"
+
+        render_match = re.search(r'id="RENDER_DATA"[^>]*>\s*([^<]+)', html)
+        if render_match:
+            try:
+                encoded = render_match.group(1)
+                # 補 padding
+                pad = 4 - len(encoded) % 4
+                if pad != 4:
+                    encoded += "=" * pad
+                decoded = base64.b64decode(encoded).decode("utf-8")
+                data = json.loads(decoded)
+
+                # 遍歷 JSON 找 video url
+                def find_video(obj, depth=0):
+                    if depth > 20:
+                        return None
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            if k in ("video", "video_url", "play_url", "play_addr", "main_url"):
+                                val = v
+                                if isinstance(val, dict):
+                                    val = val.get("url_list", val.get("url", ""))
+                                if isinstance(val, list):
+                                    val = val[0] if val else None
+                                if val and isinstance(val, str) and val.startswith("http"):
+                                    return val
+                            if isinstance(v, (dict, list)):
+                                result = find_video(v, depth + 1)
+                                if result:
+                                    return result
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            result = find_video(item, depth + 1)
+                            if result:
+                                return result
+                    return None
+
+                video_url = find_video(data)
+                if not video_url:
+                    print("[douyin] RENDER_DATA 中未找到影片網址")
+
+                # 找 title
+                def find_title(obj, depth=0):
+                    if depth > 15:
+                        return None
+                    if isinstance(obj, dict):
+                        if obj.get("desc"):
+                            return obj["desc"]
+                        for v in obj.values():
+                            result = find_title(v, depth + 1)
+                            if result:
+                                return result
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            result = find_title(item, depth + 1)
+                            if result:
+                                return result
+                    return None
+
+                t = find_title(data)
+                if t:
+                    title = t
+
+            except Exception as e:
+                print(f"[douyin] RENDER_DATA 解析失敗：{e}")
+
+        # 方法 2: RENDER_DATA 失敗，直接用 douyin 的 aweme API
+        if not video_url:
+            print("[douyin] RENDER_DATA 失敗，嘗試 aweme API…")
+            try:
+                api_headers = {**headers, "Accept": "application/json"}
+                api_url = f"https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id={video_id}"
+                api_resp = _req.get(api_url, timeout=15, headers=api_headers)
+                if api_resp.status_code == 200:
+                    api_data = api_resp.json()
+                    aweme = api_data.get("aweme_detail", {})
+                    video = aweme.get("video", {})
+                    play_addr = video.get("play_addr", {})
+                    url_list = play_addr.get("url_list", [])
+                    if url_list:
+                        video_url = url_list[0]
+                    title = aweme.get("desc") or title
+            except Exception as e:
+                print(f"[douyin] aweme API 也失敗：{e}")
+
+        if not video_url:
+            raise FileNotFoundError("抖音影片網址提取失敗")
+
+        # 下載影片
+        print(f"[douyin] 下載影片：{video_url[:80]}…")
         out = os.path.join(tmpdir, "douyin.mp4")
-        resp = _req.get(video_url, timeout=60)
+        resp = _req.get(video_url.replace("https://", "http://"), timeout=120,
+                        headers=headers, stream=True)
+        if resp.status_code >= 400:
+            # 用原 URL 重試
+            resp = _req.get(video_url, timeout=120, headers=headers, stream=True)
         with open(out, "wb") as f:
-            f.write(resp.content)
+            for chunk in resp.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
         return title, "video", out
 
     return await _run(_)
