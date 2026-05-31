@@ -389,7 +389,9 @@ class QBittorrentClient:
     async def login(self):
         status, body, headers = await self._call("POST", "/auth/login",
             data={"username": self.username, "password": self.password})
-        if body.strip() != "Ok.":
+        if status == 204:
+            pass  # 新版 qBittorrent 5.2+ 成功回 204 No Content
+        elif body.strip() != "Ok.":
             raise RuntimeError(f"qBittorrent 登入失敗：{body}")
         cookie_hdr = headers.get("Set-Cookie", "")
         self._cookie = cookie_hdr.split(";")[0] if cookie_hdr else ""
