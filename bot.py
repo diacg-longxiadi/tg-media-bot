@@ -294,7 +294,13 @@ async def dl_twitter_photos(url: str, tmpdir: str):
             paths.append(fname)
 
         name = data.get("user_screen_name", "?")
-        return f"@{name}", "photos", paths
+        tweet_text = data.get("text", "").strip()
+        title = f"@{name}"
+        if tweet_text:
+            if len(tweet_text) > 200:
+                tweet_text = tweet_text[:200] + "…"
+            title = f"@{name}\n\n{tweet_text}"
+        return title, "photos", paths
 
     return await _run(_)
 
