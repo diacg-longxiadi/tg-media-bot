@@ -99,6 +99,16 @@ TWITTER_RE = re.compile(
     r"https?://(?:www\.)?(?:twitter\.com|x\.com)/\S+/status/\d+\S*",
     re.IGNORECASE,
 )
+XIAOHONGSHU_RE = re.compile(
+    r"https?://(?:www\.)?xiaohongshu\.com/(?:explore|discovery/item)/[a-zA-Z0-9]+|"
+    r"https?://xhslink\.com/\S+",
+    re.IGNORECASE,
+)
+DOUYIN_RE = re.compile(
+    r"https?://(?:www\.)?douyin\.com/video/\d+|"
+    r"https?://v\.douyin\.com/\S+",
+    re.IGNORECASE,
+)
 MAGNET_RE = re.compile(
     r"magnet:\?xt=urn:btih:[a-fA-F0-9]{40,}[^\s]*",
     re.IGNORECASE,
@@ -117,6 +127,8 @@ def extract_known_urls(text: str):
         (YOUTUBE_RE,  "youtube"),
         (TIKTOK_RE,   "tiktok"),
         (TWITTER_RE,  "twitter"),
+        (XIAOHONGSHU_RE, "xiaohongshu"),
+        (DOUYIN_RE,   "douyin"),
     ]:
         for m in pattern.finditer(text):
             if m.group() not in seen:
@@ -939,6 +951,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for pattern, p in [
         (BILIBILI_RE, "bilibili"), (YOUTUBE_RE, "youtube"),
         (TIKTOK_RE, "tiktok"),    (TWITTER_RE, "twitter"),
+        (XIAOHONGSHU_RE, "小紅書"), (DOUYIN_RE, "抖音"),
     ]:
         if pattern.search(url):
             platform = p
