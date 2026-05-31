@@ -318,6 +318,39 @@ async def dl_twitter_photos(url: str, tmpdir: str):
     return await _run(_)
 
 
+async def dl_douyin(url: str, tmpdir: str):
+    """透過 douyin.wtf API 下載抖音影片（免 cookies）。"""
+    import requests as _req
+
+    def _():
+        api_url = "https://api.douyin.wtf/api"
+        r = _req.get(api_url, params={"url": url, "format": "json"},
+                     timeout=20, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        data = r.json()
+
+        video_url = data.get("video_url") or data.get("video") or data.get("url")
+        if not video_url:
+            # 試巢狀
+            for key in ("video_data", "data", "item"):
+                sub = data.get(key, {})
+                if isinstance(sub, dict):
+                    video_url = sub.get("video_url") or sub.get("play_addr") or sub.get("url")
+                    if video_url:
+                        break
+        if not video_url:
+            raise FileNotFoundError(f"抖音 API 未回傳影片網址：{str(data)[:300]}")
+
+        title = data.get("title") or data.get("desc") or "抖音"
+        out = os.path.join(tmpdir, "douyin.mp4")
+        resp = _req.get(video_url, timeout=60)
+        with open(out, "wb") as f:
+            f.write(resp.content)
+        return title, "video", out
+
+    return await _run(_)
+
+
 async def fetch_m3u8(url: str):
     def _():
         try:
@@ -818,6 +851,19 @@ async def handle_url(
                 return
             except Exception as te:
                 print(f"[dl] twitter photos also failed: {te}")
+
+        # 4.6 抖音 fallback（cookies 不足時走公開 API）
+        is_douyin = bool(DOUYIN_RE.search(url))
+        if is_douyin and ("cookies" in str(video_err).lower() or "cookies" in str(any_err).lower()):
+            try:
+                await status.edit_text("⏳ 抖音需要 cookies，嘗試替代 API…")
+                with tempfile.TemporaryDirectory() as d:
+                    title, kind, result = await dl_douyin(url, d)
+                    await send_video(update, context, url, result, f"🎬 {title}" if title else None)
+                await status.delete()
+                return
+            except Exception as de:
+                print(f"[dl] douyin API also failed: {de}")
 
         # 5. gallery-dl fallback（TikTok 短連結）
         is_tiktok     = bool(TIKTOK_RE.search(url))
