@@ -1,0 +1,39 @@
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV GIT_SSL_NO_VERIFY=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    make git zlib1g-dev libssl-dev gperf cmake g++ ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --recursive --depth=1 https://github.com/tdlib/telegram-bot-api.git /src
+
+RUN cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -B /src/build \
+          -S /src \
+    && cmake --build /src/build --target install -j$(nproc)
+
+# ── Runtime ──────────────────────────────────────────────
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/bin/telegram-bot-api /usr/local/bin/
+
+RUN mkdir -p /var/lib/telegram-bot-api /tmp/telegram-bot-api
+
+EXPOSE 8081
+
+CMD ["sh", "-c", "telegram-bot-api \
+    --api-id=${TELEGRAM_API_ID} \
+    --api-hash=${TELEGRAM_API_HASH} \
+    --local \
+    --dir=/var/lib/telegram-bot-api \
+    --temp-dir=/tmp/telegram-bot-api \
+    --http-port=8081"]

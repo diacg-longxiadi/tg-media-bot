@@ -1,0 +1,112 @@
+services:
+
+  telegram-bot-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: telegram-bot-api
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+      - telegram-bot-api-temp:/tmp/telegram-bot-api
+    expose:
+      - "8081"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8081' 2>/dev/null && exit 0 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Taipei
+      - WEBUI_PORT=8080
+    volumes:
+      - qb-config:/config
+      - torrent-downloads:/downloads
+    expose:
+      - "8080"
+    ports:
+      - "6881:6881"        # BitTorrent TCP
+      - "6881:6881/udp"    # BitTorrent UDP
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v2/app/version || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  tg-media-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tg-media-bot:latest
+    container_name: tg-media-bot
+    restart: unless-stopped
+    depends_on:
+      telegram-bot-api:
+        condition: service_healthy
+      qbittorrent:
+        condition: service_healthy
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - LOCAL_API_URL=http://telegram-bot-api:8081
+      - COOKIES_FILE=/app/cookies.txt
+      - CACHE_FILE=/app/cache.json
+      - TORRENT_DIR=/downloads
+      - QB_HOST=http://qbittorrent:8080
+      - QB_USER=${QB_USER:-admin}
+      - QB_PASS=${QB_PASS:-adminadmin}
+      # - HTTP_PROXY=http://your-proxy:port
+      # - HTTPS_PROXY=http://your-proxy:port
+    volumes:
+      - ./cookies.txt:/app/cookies.txt
+      - ./cache.json:/app/cache.json
+      - torrent-downloads:/downloads   # 與 qbittorrent 共享同一個 volume
+    tmpfs:
+      - /tmp:size=4g,mode=1777
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f bot.py || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  telegram-bot-api-data:
+  telegram-bot-api-temp:
+  qb-config:
+  torrent-downloads:
+
+networks:
+  default:
+    name: tg-bot-network

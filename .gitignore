@@ -1,0 +1,25 @@
+# Secrets
+.env
+cookies.txt
+cookies.txt.bak
+smtp_config.example.json
+
+# Runtime / cache
+cache.json
+cache.json.bak
+counter.json
+counter.json.bak
+
+# Backups
+*.bak
+*.bak.*
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Stray / outdated
+Dockerfile.txt
