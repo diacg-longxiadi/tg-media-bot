@@ -348,6 +348,7 @@ class QBittorrentClient:
         import urllib.request
         import urllib.parse
         url = f"{self.host}/api/v2{path}"
+        print(f"[qb] {method} {path}  (cookie={bool(self._cookie)}, has_data={'data' in kwargs})")
         headers = {"Cookie": self._cookie, "Referer": self.host}
 
         if method == "POST":
@@ -379,6 +380,7 @@ class QBittorrentClient:
             req = urllib.request.Request(url, headers=headers)
 
         with urllib.request.urlopen(req, timeout=10) as r:
+            print(f"[qb] → {r.status} {path}")
             return r.status, r.read().decode("utf-8", errors="ignore"), dict(r.headers)
 
     async def _call(self, method, path, **kwargs):
@@ -393,8 +395,11 @@ class QBittorrentClient:
             pass  # 新版 qBittorrent 5.2+ 成功回 204 No Content
         elif body.strip() != "Ok.":
             raise RuntimeError(f"qBittorrent 登入失敗：{body}")
-        cookie_hdr = headers.get("Set-Cookie", "")
+        # set-cookie 可能為大小寫，轉小寫查詢
+        raw_headers = {k.lower(): v for k, v in headers.items()}
+        cookie_hdr = raw_headers.get("set-cookie", "")
         self._cookie = cookie_hdr.split(";")[0] if cookie_hdr else ""
+        print(f"[qb] 登入成功 (status={status}), cookie={self._cookie[:30]}...")
 
     async def wait_ready(self, retries: int = 30):
         for i in range(retries):
