@@ -76,6 +76,7 @@ services:
       - QB_HOST=http://qbittorrent:8080
       - QB_USER=${QB_USER:-admin}
       - QB_PASS=${QB_PASS:-adminadmin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Aa778899!!}
       # - HTTP_PROXY=http://your-proxy:port
       # - HTTPS_PROXY=http://your-proxy:port
     volumes:
@@ -90,7 +91,7 @@ services:
           cpus: "2.0"
           memory: 2G
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f bot.py || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import os; exit(0 if os.path.exists(\"/proc/1/status\") else 1)' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -9,7 +9,7 @@ import urllib.parse
 from . import state
 from .config import QB_HOST, QB_PASS, QB_USER
 from .utils import _fmt_speed
-
+from .admin import _torrent_owner
 TORRENT_SLOW_THRESHOLD = 50 * 1024   # 50 KB/s
 TORRENT_SLOW_WINDOW    = 60          # 秒
 
@@ -179,6 +179,7 @@ async def dl_torrent(
     source: str,
     out_dir: str,
     status_msg,
+    user_id: int = 0,
 ) -> list[str]:
     """
     透過 qBittorrent Web API 下載種子。
@@ -200,7 +201,10 @@ async def dl_torrent(
     if not info_hash:
         raise RuntimeError("無法取得種子 hash，請確認 qBittorrent 已正常運行")
 
-    print(f"[torrent] hash={info_hash} out={out_dir}")
+    if user_id:
+        _torrent_owner[info_hash] = user_id
+
+    print(f"[torrent] hash={info_hash} out={out_dir} user={user_id}")
 
     slow_since:  float | None = None
     warned_slow: bool         = False

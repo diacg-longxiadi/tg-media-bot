@@ -2,12 +2,19 @@ import asyncio
 import os
 import shutil
 
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    filters,
+)
 
 from tg_media_bot import state
 from tg_media_bot.cache import _cache
 from tg_media_bot.config import BOT_TOKEN, CACHE_FILE, COOKIES_FILE, LOCAL_API_URL, QB_HOST, QB_USER, TORRENT_DIR
 from tg_media_bot.handlers import handle_torrent_file, message_handler, start_handler
+from tg_media_bot.admin import dal_handler, go_handler, list_handler, stop_handler, library_handler, library_callback
 from tg_media_bot.torrent import _torrent_worker
 
 
@@ -47,6 +54,12 @@ def main():
 
     app.post_init = _post_init
     app.add_handler(CommandHandler("start", start_handler))
+    app.add_handler(CommandHandler("dal", dal_handler))
+    app.add_handler(CommandHandler("go", go_handler))
+    app.add_handler(CommandHandler("list", list_handler))
+    app.add_handler(CommandHandler("stop", stop_handler))
+    app.add_handler(CommandHandler("library", library_handler))
+    app.add_handler(CallbackQueryHandler(library_callback, pattern="^lib:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, message_handler))
 

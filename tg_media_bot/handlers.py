@@ -10,7 +10,8 @@ from telegram.ext import ContextTypes
 
 from . import state
 from .cache import cache_get, retrieve_url
-from .config import TORRENT_DIR
+from .config import ADMIN_PASSWORD, TORRENT_DIR
+from .admin import _authed_users, _failed_attempts, dal_handler, go_handler, list_handler, stop_handler, library_handler
 from .downloaders.bilibili import dl_bilibili
 from .downloaders.douyin import dl_douyin_media
 from .downloaders.generic import dl_generic
@@ -90,7 +91,13 @@ async def handle_url(
 
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
-                title, kind, result = await _download_by_platform(platform, url, tmpdir)
+                # 包裝成可取消的 asyncio task
+                dl_task = asyncio.create_task(_download_by_platform(platform, url, tmpdir))
+                tid = state.register_task("download", f"{platform}: {url[:40]}", dl_task.cancel)
+                try:
+                    title, kind, result = await dl_task
+                finally:
+                    state.unregister_task(tid)
                 caption = f"🎬 {title}" if title else None
                 if kind == "video":
                     await send_video(update, context, url, result, caption)
@@ -144,9 +151,10 @@ async def handle_torrent_source(
 
     async def _task():
         try:
+            uid = update.effective_user.id if update.effective_user else 0
             await status.edit_text(f"開始下載種子：\n`{label}`", parse_mode="Markdown")
             out_dir = os.path.join(TORRENT_DIR, hashlib.md5(source.encode()).hexdigest()[:8])
-            files = await dl_torrent(source, out_dir, status)
+            files = await dl_torrent(source, out_dir, status, user_id=uid)
 
             if not files:
                 await status.edit_text("種子下載完成，但找不到檔案")
@@ -217,6 +225,41 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
+
+    # 管理密碼攔截
+    uid = update.effective_user.id if update.effective_user else 0
+    if uid not in _authed_users and context.user_data.get("pending_cmd"):
+        from .admin import _failed_attempts
+        text = update.message.text or ""
+        if text.strip() == ADMIN_PASSWORD:
+            _authed_users.add(uid)
+            _failed_attempts.pop(uid, None)
+            await update.message.reply_text("✅ 密碼正確")
+            args = context.user_data.pop("pending_args", [])
+            cmd = context.user_data.pop("pending_cmd", "")
+            context.args = args
+            handlers_map = {
+                "dal_handler": dal_handler,
+                "go_handler": go_handler,
+                "list_handler": list_handler,
+                "stop_handler": stop_handler,
+                "library_handler": library_handler,
+            }
+            h = handlers_map.get(cmd)
+            if h:
+                await h(update, context)
+            return
+        else:
+            count = _failed_attempts.get(uid, 0) + 1
+            _failed_attempts[uid] = count
+            if count >= 3:
+                _failed_attempts.pop(uid, None)
+                context.user_data.pop("pending_cmd", None)
+                context.user_data.pop("pending_args", None)
+                await update.message.reply_text("❌ 密碼錯誤次數過多，請重新輸入指令")
+            else:
+                await update.message.reply_text(f"❌ 密碼錯誤（{count}/3），請重試")
+            return
 
     if update.message.document:
         doc = update.message.document
