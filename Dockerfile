@@ -12,6 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY bot.py .
-RUN chmod 644 bot.py
+COPY tg_media_bot/ tg_media_bot/
+RUN chmod -R 644 bot.py tg_media_bot/
 
 CMD ["python", "-u", "bot.py"]

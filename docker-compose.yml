@@ -79,7 +79,7 @@ services:
       # - HTTP_PROXY=http://your-proxy:port
       # - HTTPS_PROXY=http://your-proxy:port
     volumes:
-      - ./cookies.txt:/app/cookies.txt
+      - ./cookies.txt:/app/cookies.txt:rw
       - ./cache.json:/app/cache.json
       - torrent-downloads:/downloads   # 與 qbittorrent 共享同一個 volume
     tmpfs:
