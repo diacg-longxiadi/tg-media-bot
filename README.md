@@ -97,6 +97,30 @@ Docker Compose also requires:
 | `TELEGRAM_API_ID` | Telegram API ID for the local Bot API server |
 | `TELEGRAM_API_HASH` | Telegram API hash for the local Bot API server |
 
+## Project Structure
+
+Core features are split into modules so each downloader can be maintained independently:
+
+| Path | Purpose |
+| --- | --- |
+| `bot.py` | Application entry point and Telegram handler registration |
+| `tg_media_bot/config.py` | Environment variable configuration |
+| `tg_media_bot/cache.py` | File ID cache and deep-link URL storage |
+| `tg_media_bot/patterns.py` | URL and magnet matching rules |
+| `tg_media_bot/handlers.py` | Telegram message routing and download workflow |
+| `tg_media_bot/telegram_sender.py` | Telegram upload/reply helpers |
+| `tg_media_bot/torrent.py` | qBittorrent client, torrent queue, and torrent download logic |
+| `tg_media_bot/downloaders/youtube.py` | YouTube downloader module |
+| `tg_media_bot/downloaders/bilibili.py` | Bilibili downloader module |
+| `tg_media_bot/downloaders/tiktok.py` | TikTok downloader module |
+| `tg_media_bot/downloaders/twitter.py` | X/Twitter downloader module |
+| `tg_media_bot/downloaders/xiaohongshu.py` | Xiaohongshu downloader module |
+| `tg_media_bot/downloaders/douyin.py` | Douyin downloader module |
+| `tg_media_bot/downloaders/generic.py` | Generic URL downloader module |
+| `tg_media_bot/downloaders/stream.py` | `m3u8` extraction and `ffmpeg` download fallback |
+| `tg_media_bot/downloaders/gallery.py` | Shared `gallery-dl` helper |
+| `tg_media_bot/downloaders/yt_dlp.py` | Shared `yt-dlp` helper |
+
 ## Cookies
 
 Some platforms may require cookies for age-restricted, private, region-limited, or logged-in content. Put exported cookies into `cookies.txt`; the file is mounted into the container as `/app/cookies.txt`.
